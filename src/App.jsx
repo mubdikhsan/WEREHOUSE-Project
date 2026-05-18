@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import HomeScreen from './screens/HomeScreen';
 import ItemListScreen from './screens/ItemListScreen';
 import FormScreen from './screens/FormScreen';
+import AdminTableScreen from './screens/AdminTableScreen';
 import Toast from './components/Toast';
 import { useToast } from './hooks/useToast';
 import { getItems } from './store/db';
@@ -31,6 +32,8 @@ export default function App() {
     { id: 'dapur',  label: 'Gudang Dapur',  icon: '🍳', cls: 'card-dapur'  },
     { id: 'kimia',  label: 'Gudang Kimia',  icon: '🧪', cls: 'card-kimia'  },
   ]);
+  const [user, setUser] = useState(null);
+  const [authOpen, setAuthOpen] = useState(false);
   const { toast, showToast } = useToast();
 
   // ── Theme ──────────────────────────────────────────────────────
@@ -89,6 +92,37 @@ export default function App() {
     setTheme(t => (t === 'dark' ? 'light' : 'dark'));
   }, []);
 
+  const handleLogin = useCallback((userData) => {
+    setUser(userData);
+    localStorage.setItem('user', JSON.stringify(userData));
+    showToast(`Selamat datang, ${userData.name}!`);
+  }, [showToast]);
+
+  const handleLogout = useCallback(() => {
+    setUser(null);
+    localStorage.removeItem('user');
+    showToast('Anda telah logout');
+    setScreen('home');
+    setGudang(null);
+    setEditItem(null);
+  }, [showToast]);
+
+  const handleRequireLogin = useCallback(() => {
+    setAuthOpen(true);
+  }, []);
+
+  // Load user from localStorage on mount
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (err) {
+        console.error('Error loading user:', err);
+      }
+    }
+  }, []);
+
   // ── Navigation ─────────────────────────────────────────────────
   const goHome = useCallback(async () => {
     setScreen('home');
@@ -101,8 +135,9 @@ export default function App() {
   const goList = useCallback((g) => {
     setGudang(g);
     setEditItem(null);
-    setScreen('list');
-  }, []);
+    // Admin sees table view, user sees list view
+    setScreen(user?.is_admin ? 'admin-table' : 'list');
+  }, [user]);
 
   const goAdd = useCallback(() => {
     setEditItem(null);
@@ -118,14 +153,14 @@ export default function App() {
     setListRefreshKey(k => k + 1);
     const counts = await getItemCounts(gudangList);
     setItemCounts(counts);
-    setScreen('list');
+    setScreen(user?.is_admin ? 'admin-table' : 'list');
     showToast(`"${item.namaBarang}" berhasil disimpan!`);
-  }, [showToast, gudangList]);
+  }, [showToast, gudangList, user]);
 
   const handleBackFromForm = useCallback(() => {
-    setScreen('list');
+    setScreen(user?.is_admin ? 'admin-table' : 'list');
     setEditItem(null);
-  }, []);
+  }, [user]);
 
   return (
     <div className="app">
@@ -136,6 +171,12 @@ export default function App() {
           itemCounts={itemCounts}
           theme={theme}
           onToggleTheme={toggleTheme}
+          user={user}
+          onLogin={handleLogin}
+          onLogout={handleLogout}
+          onRequireLogin={handleRequireLogin}
+          authOpen={authOpen}
+          setAuthOpen={setAuthOpen}
         />
       )}
       {screen === 'list' && gudang && (
@@ -147,6 +188,18 @@ export default function App() {
           refreshKey={listRefreshKey}
           theme={theme}
           onToggleTheme={toggleTheme}
+          user={user}
+          onLogout={handleLogout}
+        />
+      )}
+      {screen === 'admin-table' && gudang && (
+        <AdminTableScreen
+          gudang={gudang}
+          onBack={goHome}
+          onEdit={goEdit}
+          theme={theme}
+          user={user}
+          onLogout={handleLogout}
         />
       )}
       {screen === 'form' && gudang && (
@@ -155,6 +208,8 @@ export default function App() {
           editItem={editItem}
           onBack={handleBackFromForm}
           onSaved={handleSaved}
+          user={user}
+          onLogout={handleLogout}
         />
       )}
       <Toast toast={toast} />

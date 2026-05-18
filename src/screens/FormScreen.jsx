@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { saveItem, getSuggestions, generateId } from '../store/db';
 import SignaturePad from '../components/SignaturePad';
+import UserDropdown from '../components/UserDropdown';
 
 const SATUAN_LIST = [
   'Kg', 'Gram', 'Liter', 'mL', 'Buah', 'Pcs',
@@ -14,7 +15,7 @@ function formatDateTime(date = new Date()) {
   });
 }
 
-export default function FormScreen({ gudang, editItem, onBack, onSaved }) {
+export default function FormScreen({ gudang, editItem, onBack, onSaved, user, onLogout }) {
   const isEdit = !!editItem;
   const fileInputRef = useRef(null);
 
@@ -140,7 +141,9 @@ export default function FormScreen({ gudang, editItem, onBack, onSaved }) {
         <div className="header-title">
           {isEdit ? '✏️ Edit Item' : '➕ Tambah Item'}
         </div>
-        <div style={{ width: 40 }} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {user && <UserDropdown user={user} onLogout={onLogout} />}
+        </div>
       </div>
 
       <div className="form-body">

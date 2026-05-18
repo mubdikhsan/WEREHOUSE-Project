@@ -1,6 +1,7 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
 import cors from 'cors';
+import bcrypt from 'bcrypt';
 
 const app = express();
 const port = 3001;
@@ -186,7 +187,7 @@ app.get('/api/suggestions', async (req, res) => {
 // Helper function untuk update suggestions
 async function updateSuggestions(namaBarang) {
   if (!namaBarang) return;
-  
+
   try {
     // Check if suggestion exists
     const { data: existing } = await supabase
@@ -194,12 +195,12 @@ async function updateSuggestions(namaBarang) {
       .select('*')
       .eq('nama_barang', namaBarang)
       .single();
-    
+
     if (existing) {
       // Update existing
       await supabase
         .from('suggestions')
-        .update({ 
+        .update({
           usage_count: existing.usage_count + 1,
           last_used: new Date().toISOString()
         })
@@ -220,6 +221,215 @@ async function updateSuggestions(namaBarang) {
     console.error('Error updating suggestions:', err);
   }
 }
+
+// Helper function untuk generate user ID
+function generateUserId(role) {
+  // User ID: random string
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+// Predefined admin IDs mapping
+const ADMIN_IDS = {
+  '01001': 'Kepala Dapur',
+  '01021': 'Akuntansi',
+  '01022': 'Pengawas Gizi',
+  '01031': 'Admin Gudang',
+  '01032': 'Asisten Lapangan'
+};
+
+// Helper function untuk check if ID is admin
+function isAdminId(userId, role) {
+  return String(userId).startsWith('010');
+}
+
+// Helper function untuk log user action
+async function logUserAction(userId, actionType, actionDetails, gudangId = null, itemId = null) {
+  try {
+    await supabase.from('user_actions').insert([
+      {
+        user_id: userId,
+        action_type: actionType,
+        action_details: actionDetails,
+        gudang_id: gudangId,
+        item_id: itemId
+      }
+    ]);
+  } catch (err) {
+    console.error('Error logging user action:', err);
+  }
+}
+
+// POST register new user
+app.post('/api/auth/register', async (req, res) => {
+  const { name, email, password, role, userId } = req.body;
+
+  if (!name || !email || !password || !role || !userId) {
+    return res.status(400).json({ status: 'error', message: 'Semua field wajib diisi' });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ status: 'error', message: 'Password minimal 6 karakter' });
+  }
+
+  const validRoles = ['Kepala Dapur', 'Akuntansi', 'Pengawas Gizi', 'Admin Gudang', 'Asisten Lapangan', 'user'];
+  if (!validRoles.includes(role)) {
+    return res.status(400).json({ status: 'error', message: 'Role tidak valid' });
+  }
+
+  try {
+    // Check if email already exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (existingUser) {
+      return res.status(400).json({ status: 'error', message: 'Email sudah terdaftar' });
+    }
+
+    // Check if userId already exists
+    const { data: existingId } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (existingId) {
+      return res.status(400).json({ status: 'error', message: 'ID User sudah digunakan' });
+    }
+
+    // Check if ID matches predefined admin ID for the role
+    const isAdmin = isAdminId(userId, role);
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Insert new user
+    const { data, error } = await supabase
+      .from('users')
+      .insert([
+        {
+          id: userId,
+          name,
+          email,
+          password: hashedPassword,
+          role,
+          is_admin: isAdmin
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Log registration action
+    await logUserAction(userId, 'REGISTER', `User ${name} registered with role ${role} as ${isAdmin ? 'admin' : 'user'}`);
+
+    res.json({ status: 'success', message: 'Registrasi berhasil', data: { id: data.id, name: data.name, email: data.email, role: data.role, is_admin: data.is_admin } });
+  } catch (err) {
+    console.error('Error registering user:', err);
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// POST login
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password, role, userId } = req.body;
+
+  if (!email || !password || !role || !userId) {
+    return res.status(400).json({ status: 'error', message: 'Semua field wajib diisi' });
+  }
+
+  try {
+    // Find user by email and userId
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .eq('id', userId)
+      .single();
+
+    if (error || !user) {
+      return res.status(401).json({ status: 'error', message: 'Email atau ID User salah' });
+    }
+
+    // Check role
+    if (user.role !== role) {
+      return res.status(401).json({ status: 'error', message: 'Role tidak sesuai' });
+    }
+
+    // Verify password
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+      return res.status(401).json({ status: 'error', message: 'Password salah' });
+    }
+
+    const isActuallyAdmin = String(user.id).startsWith('010');
+
+    // Log login action
+    await logUserAction(user.id, 'LOGIN', `User ${user.name} logged in as ${isActuallyAdmin ? 'admin' : 'user'}`);
+
+    res.json({
+      status: 'success',
+      message: 'Login berhasil',
+      data: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        is_admin: isActuallyAdmin
+      }
+    });
+  } catch (err) {
+    console.error('Error logging in:', err);
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// GET user actions (for admin)
+app.get('/api/admin/actions', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('user_actions')
+      .select(`
+        *,
+        users:user_id (name, email, role)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+
+    res.json({ status: 'success', data });
+  } catch (err) {
+    console.error('Error fetching user actions:', err);
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// GET all users (for admin)
+app.get('/api/admin/users', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Remove password from response
+    const usersWithoutPassword = data.map(user => {
+      const { password, ...userWithoutPassword } = user;
+      return userWithoutPassword;
+    });
+
+    res.json({ status: 'success', data: usersWithoutPassword });
+  } catch (err) {
+    console.error('Error fetching users:', err);
+    return res.status(500).json({ status: 'error', message: err.message });
+  }
+});
 
 // Global error handler
 app.use((err, req, res, next) => {

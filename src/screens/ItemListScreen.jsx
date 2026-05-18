@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { getItems, deleteItem } from '../store/db';
+import UserDropdown from '../components/UserDropdown';
 
-export default function ItemListScreen({ gudang, onBack, onAdd, onEdit, refreshKey, theme, onToggleTheme }) {
+export default function ItemListScreen({ gudang, onBack, onAdd, onEdit, refreshKey, theme, onToggleTheme, user, onLogout }) {
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -36,7 +37,8 @@ export default function ItemListScreen({ gudang, onBack, onAdd, onEdit, refreshK
       <div className="header">
         <button className="icon-btn back" onClick={onBack} aria-label="Kembali">←</button>
         <div className="header-title">{gudang.icon} {gudang.label}</div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {user && <UserDropdown user={user} onLogout={onLogout} />}
           <button
             className="theme-btn"
             onClick={onToggleTheme}

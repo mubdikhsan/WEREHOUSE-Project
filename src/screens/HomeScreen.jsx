@@ -1,7 +1,12 @@
 import React from 'react';
 import kiraLogo from '../assets/img/KIRA-logo.png';
+import Auth from '../components/Auth';
+import UserDropdown from '../components/UserDropdown';
 
-export default function HomeScreen({ gudangList, onSelect, itemCounts, theme, onToggleTheme }) {
+export default function HomeScreen({ gudangList, onSelect, itemCounts, theme, onToggleTheme, user, onLogin, onLogout, onRequireLogin, authOpen, setAuthOpen }) {
+  const [localAuthOpen, setLocalAuthOpen] = React.useState(false);
+  const isAuthOpen = authOpen !== undefined ? authOpen : localAuthOpen;
+  const setAuth = setAuthOpen !== undefined ? setAuthOpen : setLocalAuthOpen;
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Selamat Pagi ☀️' : hour < 18 ? 'Selamat Siang 🌤️' : 'Selamat Malam 🌙';
@@ -20,15 +25,24 @@ export default function HomeScreen({ gudangList, onSelect, itemCounts, theme, on
             <div className="sub">Manajemen Stok Gudang</div>
           </div>
         </div>
-        {/* Theme toggle */}
-        <button
-          className="theme-btn"
-          onClick={onToggleTheme}
-          title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
-          aria-label="Toggle tema"
-        >
-          {theme === 'dark' ? '☀️' : '🌙'}
-        </button>
+        <div className="header-actions">
+          {user ? (
+            <UserDropdown user={user} onLogout={onLogout} />
+          ) : (
+            <>
+              <Auth onLogin={onLogin} isOpen={isAuthOpen} setIsOpen={setAuth} />
+              <button onClick={() => setAuth(true)} className="auth-btn">Sign In</button>
+            </>
+          )}
+          <button
+            className="theme-btn"
+            onClick={onToggleTheme}
+            title={theme === 'dark' ? 'Mode Terang' : 'Mode Gelap'}
+            aria-label="Toggle tema"
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+        </div>
       </div>
 
       <div className="home-greeting">
@@ -40,15 +54,13 @@ export default function HomeScreen({ gudangList, onSelect, itemCounts, theme, on
         {gudangList.map(g => (
           <button
             key={g.id}
-            className={`warehouse-card ${g.cls}`}
-            onClick={() => onSelect(g)}
+            onClick={() => user ? onSelect(g) : onRequireLogin()}
+            className={`warehouse-card ${g.cls} ${theme}`}
+            title={!user ? 'Login dulu untuk mengakses' : ''}
           >
-            <div className="card-dot" />
             <div className="card-icon">{g.icon}</div>
             <div className="card-label">{g.label}</div>
-            <div className="card-count">
-              {itemCounts[g.id] || 0} item
-            </div>
+            <div className="card-count">{itemCounts[g.id] || 0} item</div>
           </button>
         ))}
       </div>
