@@ -24,7 +24,7 @@ export async function getGudangList() {
 
 export async function getItems(gudangId) {
   try {
-    const response = await fetch(`${API_BASE}/items/${gudangId}`);
+    const response = await fetch(`${API_BASE}/items/gudang/${gudangId}`);
     const result = await response.json();
     if (result.status === 'success') {
       return result.data.map(item => ({

@@ -1,0 +1,32 @@
+import { supabase } from '../utils/supabase.js';
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', ['GET']);
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+
+  const { gudangId } = req.query;
+
+  try {
+    const { data, error } = await supabase
+      .from('items')
+      .select('*')
+      .eq('gudang_id', gudangId)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.status(200).json({ status: 'success', data: data });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+}
